@@ -17,12 +17,14 @@
 
 namespace PhpOffice\PhpWord\Reader\Word2007;
 
+use PhpOffice\Common\File;
 use PhpOffice\Common\XMLReader;
 use PhpOffice\PhpWord\ComplexType\TblWidth as TblWidthComplexType;
 use PhpOffice\PhpWord\Element\AbstractContainer;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\Element\TrackChange;
 use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Shared\WmfToGif;
 
 /**
  * Abstract part reader
@@ -273,16 +275,31 @@ abstract class AbstractPart
             $target = $this->getMediaTarget($docPart, $embedId);
             if (!is_null($target)) {
                 $imageSource = "zip://{$this->docFile}#{$target}";
-                $parent->addImage($imageSource, null, false, $name);
+                try{
+                    $parent->addImage($imageSource, null, false, $name);
+                }catch (\Exception $ex){
+                    echo "Lỗi ảnh " . $ex->getMessage() . "\n";
+                }
             }
         } elseif ($node->nodeName == 'w:object') {
             // Object
             $rId = $xmlReader->getAttribute('r:id', $node, 'o:OLEObject');
+            $rIdWmf = $xmlReader->getAttribute('r:id', $node, 'v:shape/v:imagedata');
             // $rIdIcon = $xmlReader->getAttribute('r:id', $domNode, 'w:object/v:shape/v:imagedata');
             $target = $this->getMediaTarget($docPart, $rId);
+            $target_wmf = $this->getMediaTarget($docPart, $rIdWmf);
             if (!is_null($target)) {
-                $textContent = "&lt;Object: {$target}>";
-                $parent->addText($textContent, $fontStyle, $paragraphStyle);
+                try{
+                    if(is_null( $target_wmf )){
+                        throw new \Exception("OOO");
+                    }
+                    $image = WmfToGif::convert( File::fileGetContents( "zip://" . $this->docFile . "#" . $target_wmf));
+                    $parent->addImage($image->__toString(), null, false, basename( $target_wmf ));
+                }catch (\Exception $ex){
+                    echo "Lỗi wmf " . $ex->getMessage();
+                    $textContent = "&lt;Object: {$target}>";
+                    $parent->addText($textContent, $fontStyle, $paragraphStyle);
+                }
             }
         } elseif ($node->nodeName == 'w:br') {
             $parent->addTextBreak();
